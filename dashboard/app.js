@@ -209,12 +209,15 @@
       origins.forEach(function (o) {
         groupsByOf(onDay(list, d).filter(function (t) { return t[1] === o; })).forEach(function (g) { groups.push(g); });
       });
-      return groups.map(function (g, idx) {
+      var dayList = onDay(list, d);
+      var rows = groups.map(function (g, idx) {
         var warn = g.some(function (t) { return t[2] < 0; });
-        var cls = (idx === 0 ? "pair-start" : idx === groups.length - 1 ? "pair-end" : "pair-mid") + (warn ? " warn" : "");
-        var day = idx === 0 ? '<td class="daycell" rowspan="' + groups.length + '"><b>' + esc(L.dayLabel(d)) + "</b></td>" : "";
+        var cls = (idx === 0 ? "pair-start" : "pair-mid") + (warn ? " warn" : "");
+        var day = idx === 0 ? '<td class="daycell" rowspan="' + (groups.length + 1) + '"><b>' + esc(L.dayLabel(d)) + "</b></td>" : "";
         return '<tr class="' + cls + '">' + day + "<td>" + esc(L.NOME[g[0][1]]) + "</td>" + originCells(g, carriers, esc(materialLabel(g))) + "</tr>";
-      }).join("");
+      });
+      rows.push('<tr class="subtotal"><td>Subtotal</td>' + originCells(dayList, carriers, dayList.length + " carros no dia") + "</tr>");
+      return rows.join("");
     }).join("");
     var totals = origins.map(function (o, idx) {
       var dl = list.filter(function (t) { return t[1] === o; });
@@ -224,7 +227,7 @@
     }).join("");
     var grandNums = carrierCounts(list, carriers).map(function (n) { return '<td class="num">' + n + "</td>"; }).join("");
     var grand = '<tr class="total"><td colspan="2">Total geral</td><td class="mat">' + groupsByOf(list).length + " ordens de frete</td>" + grandNums + '<td class="num">' + list.length + '</td><td class="prog">' + esc(L.oneLine(list)) + "</td></tr>";
-    return '<section class="card panel"><h2>Controle diário — carros × transportadora</h2><p class="cap">Uma ordem de frete é um veículo. Se o número se repete na planilha, os materiais são do mesmo carro. No nacional, 1 OF = 1 carro. No importado, o carro continua o contêiner; a OF mostra a carga da ordem. Linha em destaque: carro sem transportadora.</p><div class="scroll"><table class="daily">' + head + body + totals + grand + "</table></div></section>";
+    return '<section class="card panel"><h2>Controle diário — carros × transportadora</h2><p class="cap">Uma ordem de frete é um veículo. Se o número se repete na planilha, os materiais são do mesmo carro. A linha Subtotal soma os carros daquele dia. Linha em destaque: carro sem transportadora.</p><div class="scroll"><table class="daily">' + head + body + totals + grand + "</table></div></section>";
   }
 
   function kpi(label, value, hint, alert) {

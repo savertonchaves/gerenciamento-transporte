@@ -288,6 +288,7 @@ td.daycell { vertical-align: middle; font-weight: 700; }
 tr.pair-start td, tr.pair-mid td { border-bottom-style: dashed; }
 tr.pair-end td { border-bottom-color: #c5d0dc; }
 tr.warn td { background: var(--orange-soft); }
+tr.subtotal td { background: #e7eef8; font-weight: 700; border-bottom-color: #c5d0dc; }
 tr.total td { background: #f3f6fb; font-weight: 700; }
 tr.total.warn td { background: #fff1df; }
 
