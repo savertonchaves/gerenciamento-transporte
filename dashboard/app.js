@@ -140,21 +140,56 @@
     });
   }
 
-  function materialsOf(dl) {
-    var seen = {};
-    var out = [];
+  function ofNumber(t) {
+    var m = String(t[3]).match(/OF\s+([0-9]+(?:\/[0-9]+)*)/);
+    return m ? m[1] : String(t[3]);
+  }
+
+  function groupsByOf(dl) {
+    var map = {};
+    var order = [];
     dl.forEach(function (t) {
+      var key = ofNumber(t);
+      if (!map[key]) {
+        map[key] = [];
+        order.push(key);
+      }
+      map[key].push(t);
+    });
+    order.sort(function (a, b) {
+      var na = parseInt(a, 10);
+      var nb = parseInt(b, 10);
+      if (na !== nb) return na - nb;
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+    return order.map(function (key) { return map[key]; });
+  }
+
+  function materialLabel(group) {
+    var mats = [];
+    var seen = {};
+    group.forEach(function (t) {
       String(t[5] || "").split(" · ").forEach(function (m) {
         if (!m || seen[m]) return;
         seen[m] = 1;
-        out.push(m);
+        mats.push(m);
       });
     });
-    return out.length ? out.join(" · ") : "–";
+    var line = "OF " + ofNumber(group[0]) + " — " + (mats.join(" · ") || "–");
+    if (group[0][1] === "I" && group.length > 1) {
+      var boxes = group.map(function (t) { return String(t[3]).replace(/\s*\(OF[^)]*\)/, ""); });
+      line += " (" + group.length + " carros: " + boxes.join(", ") + ")";
+    }
+    return line;
   }
 
-  function originCells(dl, carriers) {
-    var mat = '<td class="mat">' + esc(materialsOf(dl)) + "</td>";
+  function materialBlock(dl) {
+    if (!dl.length) return "–";
+    return groupsByOf(dl).map(function (g) { return esc(materialLabel(g)); }).join("<br>");
+  }
+
+  function originCells(dl, carriers, materialHtml) {
+    var mat = '<td class="mat">' + (materialHtml == null ? materialBlock(dl) : materialHtml) + "</td>";
     var nums = carrierCounts(dl, carriers).map(function (n) { return '<td class="num">' + n + "</td>"; }).join("");
     var total = dl.length ? "<b>" + dl.length + "</b>" : "–";
     var prog = dl.length ? esc(L.oneLine(dl)) : "–";
@@ -170,23 +205,26 @@
       return '<th class="' + (i >= 3 && i < headers.length - 1 ? "num" : "") + '">' + esc(h) + "</th>";
     }).join("") + "</tr>";
     var body = days.map(function (d) {
-      return origins.map(function (o, idx) {
-        var dl = onDay(list, d).filter(function (t) { return t[1] === o; });
-        var warn = dl.some(function (t) { return t[2] < 0; });
-        var cls = (idx === 0 ? "pair-start" : "pair-end") + (warn ? " warn" : "");
-        var day = idx === 0 ? '<td class="daycell" rowspan="2"><b>' + esc(L.dayLabel(d)) + "</b></td>" : "";
-        return '<tr class="' + cls + '">' + day + "<td>" + esc(L.NOME[o]) + "</td>" + originCells(dl, carriers) + "</tr>";
+      var groups = [];
+      origins.forEach(function (o) {
+        groupsByOf(onDay(list, d).filter(function (t) { return t[1] === o; })).forEach(function (g) { groups.push(g); });
+      });
+      return groups.map(function (g, idx) {
+        var warn = g.some(function (t) { return t[2] < 0; });
+        var cls = (idx === 0 ? "pair-start" : idx === groups.length - 1 ? "pair-end" : "pair-mid") + (warn ? " warn" : "");
+        var day = idx === 0 ? '<td class="daycell" rowspan="' + groups.length + '"><b>' + esc(L.dayLabel(d)) + "</b></td>" : "";
+        return '<tr class="' + cls + '">' + day + "<td>" + esc(L.NOME[g[0][1]]) + "</td>" + originCells(g, carriers, esc(materialLabel(g))) + "</tr>";
       }).join("");
     }).join("");
     var totals = origins.map(function (o, idx) {
       var dl = list.filter(function (t) { return t[1] === o; });
       var warn = dl.some(function (t) { return t[2] < 0; });
       var day = idx === 0 ? '<td class="daycell" rowspan="2">Total</td>' : "";
-      return '<tr class="total' + (warn ? " warn" : "") + '">' + day + "<td>" + esc(L.NOME[o]) + "</td>" + originCells(dl, carriers) + "</tr>";
+      return '<tr class="total' + (warn ? " warn" : "") + '">' + day + "<td>" + esc(L.NOME[o]) + "</td>" + originCells(dl, carriers, groupsByOf(dl).length + " ordens de frete") + "</tr>";
     }).join("");
     var grandNums = carrierCounts(list, carriers).map(function (n) { return '<td class="num">' + n + "</td>"; }).join("");
-    var grand = '<tr class="total"><td colspan="2">Total geral</td><td class="mat">' + esc(materialsOf(list)) + "</td>" + grandNums + '<td class="num">' + list.length + '</td><td class="prog">' + esc(L.oneLine(list)) + "</td></tr>";
-    return '<section class="card panel"><h2>Controle diário — carros × transportadora</h2><p class="cap">Cada dia tem duas linhas. Material é a descrição da planilha. No importado, se vários contêineres estão na mesma célula, a descrição vale para o conjunto. Linha em destaque: carro sem transportadora.</p><div class="scroll"><table class="daily">' + head + body + totals + grand + "</table></div></section>";
+    var grand = '<tr class="total"><td colspan="2">Total geral</td><td class="mat">' + groupsByOf(list).length + " ordens de frete</td>" + grandNums + '<td class="num">' + list.length + '</td><td class="prog">' + esc(L.oneLine(list)) + "</td></tr>";
+    return '<section class="card panel"><h2>Controle diário — carros × transportadora</h2><p class="cap">Uma ordem de frete é um veículo. Se o número se repete na planilha, os materiais são do mesmo carro. No nacional, 1 OF = 1 carro. No importado, o carro continua o contêiner; a OF mostra a carga da ordem. Linha em destaque: carro sem transportadora.</p><div class="scroll"><table class="daily">' + head + body + totals + grand + "</table></div></section>";
   }
 
   function kpi(label, value, hint, alert) {
