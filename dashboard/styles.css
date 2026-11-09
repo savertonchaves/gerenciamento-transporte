@@ -272,7 +272,7 @@ button.primary:hover { background: var(--blue-mid); }
 
 .scroll { overflow: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-th, td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th, td { padding: 7px 8px; text-align: center; vertical-align: middle; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th {
   position: sticky;
   top: 0;
@@ -282,8 +282,8 @@ th {
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-td.prog { white-space: normal; min-width: 260px; }
+td.num, th.num { text-align: center; font-variant-numeric: tabular-nums; }
+td.prog, td.mat { white-space: normal; min-width: 180px; max-width: 320px; text-align: center; }
 td.daycell { vertical-align: middle; font-weight: 700; }
 tr.pair-start td { border-bottom-style: dashed; }
 tr.pair-end td { border-bottom-color: #c5d0dc; }
