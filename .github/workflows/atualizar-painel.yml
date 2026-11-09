@@ -1,0 +1,74 @@
+name: Atualizar painel Omnia
+
+# Roda na branch main, que é a padrão. A programação em si fica em dashboard-omnia.
+on:
+  schedule:
+    # De hora em hora, dias úteis, 8h às 18h em America/Sao_Paulo (UTC−3, sem horário de verão).
+    - cron: "0 11-21 * * 1-5"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [planilha]
+
+permissions:
+  contents: write
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código do painel
+        uses: actions/checkout@v4
+        with:
+          ref: dashboard-omnia
+          fetch-depth: 0
+
+      - name: Preparar o Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar a leitura da planilha
+        run: pip install openpyxl
+
+      - name: Baixar a planilha do SharePoint
+        id: baixar
+        env:
+          MS_REFRESH_TOKEN: ${{ secrets.MS_REFRESH_TOKEN }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MS_TENANT_ID: ${{ secrets.MS_TENANT_ID }}
+        run: |
+          if [ -z "$MS_REFRESH_TOKEN" ]; then
+            echo "ok=skip" >> "$GITHUB_OUTPUT"
+            echo "SharePoint ainda sem autorização. O painel não foi alterado."
+            exit 0
+          fi
+          python3 dashboard/atualizar.py --baixar /tmp/omnia.xlsx
+          echo "ok=yes" >> "$GITHUB_OUTPUT"
+
+      - name: Reler os carros
+        if: steps.baixar.outputs.ok == 'yes'
+        run: python3 dashboard/atualizar.py /tmp/omnia.xlsx
+
+      - name: Publicar se a programação mudou
+        if: steps.baixar.outputs.ok == 'yes'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dashboard/data.js dashboard/index.html
+          if git diff --cached --quiet; then
+            echo "Nada mudou na programação."
+            exit 0
+          fi
+          git commit -m "Atualiza a programação de carros a partir da planilha"
+          git push origin HEAD:dashboard-omnia
+          workdir=$(mktemp -d)
+          git clone --branch gh-pages --depth 1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$workdir"
+          cp dashboard/index.html dashboard/app.js dashboard/data.js dashboard/logic.js dashboard/styles.css \
+            dashboard/favicon.svg dashboard/favicon-dark.svg dashboard/favicon.png "$workdir/"
+          git -C "$workdir" add -A
+          if git -C "$workdir" diff --cached --quiet; then
+            exit 0
+          fi
+          git -C "$workdir" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Atualiza a programação de carros a partir da planilha"
+          git -C "$workdir" push origin gh-pages
