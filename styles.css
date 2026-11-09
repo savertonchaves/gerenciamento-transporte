@@ -285,7 +285,7 @@ th {
 td.num, th.num { text-align: center; font-variant-numeric: tabular-nums; }
 td.prog, td.mat { white-space: normal; min-width: 180px; max-width: 320px; text-align: center; }
 td.daycell { vertical-align: middle; font-weight: 700; }
-tr.pair-start td { border-bottom-style: dashed; }
+tr.pair-start td, tr.pair-mid td { border-bottom-style: dashed; }
 tr.pair-end td { border-bottom-color: #c5d0dc; }
 tr.warn td { background: var(--orange-soft); }
 tr.total td { background: #f3f6fb; font-weight: 700; }
