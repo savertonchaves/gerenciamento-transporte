@@ -1,12 +1,17 @@
 (function (root) {
-  var CARRIERS = ["DANIEL TRANSPORTES", "FRACHT LOG", "IRAPURU", "TERMACO"];
+  var CARRIERS = (root.OMNIA_CARRIERS && root.OMNIA_CARRIERS.length)
+    ? root.OMNIA_CARRIERS.slice()
+    : ["DANIEL TRANSPORTES", "FRACHT LOG", "IRAPURU", "TERMACO"];
   var SEM = "Sem transportadora";
   var ALL = CARRIERS.concat([SEM]);
   var TZ = "America/Sao_Paulo";
   var NOME = { N: "Nacional", I: "Importado" };
   var WD = { Sun: "dom", Mon: "seg", Tue: "ter", Wed: "qua", Thu: "qui", Fri: "sex", Sat: "sáb" };
 
-  function fullDate(t) { return "2026-" + t[0]; }
+  function fullDate(t) {
+    var d = String(t[0]);
+    return d.length > 5 ? d : "2026-" + d;
+  }
   function carrierOf(t) { return t[2] < 0 ? SEM : CARRIERS[t[2]]; }
   function utc(iso) {
     var p = iso.split("-").map(Number);
@@ -93,6 +98,15 @@
       "DANIEL TRANSPORTES": "#5b6cc0",
       "FRACHT LOG": "#8a6bb5",
       "Sem transportadora": "#e07b1a",
+    },
+    color: function (name) {
+      var known = root.OmniaLogic && root.OmniaLogic.COLORS;
+      if (known && known[name]) return known[name];
+      var palette = ["#0e7490", "#b45309", "#be185d", "#166534", "#4338ca", "#9f1239"];
+      var n = 0;
+      var text = String(name || "");
+      for (var i = 0; i < text.length; i++) n = (n + text.charCodeAt(i)) % palette.length;
+      return palette[n];
     },
     fullDate: fullDate,
     carrierOf: carrierOf,

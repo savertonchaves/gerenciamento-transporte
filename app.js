@@ -43,7 +43,7 @@
 
   function legend(names) {
     return '<div class="legend">' + names.map(function (c) {
-      return '<span><i class="sw" style="background:' + L.COLORS[c] + '"></i>' + esc(c) + "</span>";
+      return '<span><i class="sw" style="background:' + L.color(c) + '"></i>' + esc(c) + "</span>";
     }).join("") + "</div>";
   }
 
@@ -77,7 +77,7 @@
         if (!n) return;
         var h = (n / max) * ih;
         y -= h;
-        parts.push('<rect x="' + x + '" y="' + y + '" width="' + bw + '" height="' + h + '" fill="' + L.COLORS[c] + '"><title>' + esc(L.dayLabel(d) + " · " + c + ": " + n) + "</title></rect>");
+        parts.push('<rect x="' + x + '" y="' + y + '" width="' + bw + '" height="' + h + '" fill="' + L.color(c) + '"><title>' + esc(L.dayLabel(d) + " · " + c + ": " + n) + "</title></rect>");
       });
       var lx = x + bw / 2;
       var ly = padT + ih + 14;
@@ -107,10 +107,10 @@
       function pt(r, ang) { return [cx + r * Math.cos(ang), cy + r * Math.sin(ang)]; }
       var p0 = pt(r1, a0), p1 = pt(r1, a1), p2 = pt(r0, a1), p3 = pt(r0, a0);
       var d = "M " + p0[0] + " " + p0[1] + " A " + r1 + " " + r1 + " 0 " + large + " 1 " + p1[0] + " " + p1[1] + " L " + p2[0] + " " + p2[1] + " A " + r0 + " " + r0 + " 0 " + large + " 0 " + p3[0] + " " + p3[1] + " Z";
-      return '<path d="' + d + '" fill="' + L.COLORS[s.c] + '"><title>' + esc(s.c + ": " + s.n) + "</title></path>";
+      return '<path d="' + d + '" fill="' + L.color(s.c) + '"><title>' + esc(s.c + ": " + s.n) + "</title></path>";
     }).join("");
     var legendHtml = slices.map(function (s) {
-      return '<div><span><i class="sw" style="background:' + L.COLORS[s.c] + '"></i> ' + esc(s.c) + '</span><b>' + s.n + " · " + pct(s.n, list.length) + "</b></div>";
+      return '<div><span><i class="sw" style="background:' + L.color(s.c) + '"></i> ' + esc(s.c) + '</span><b>' + s.n + " · " + pct(s.n, list.length) + "</b></div>";
     }).join("");
     var r = range();
     return '<section class="card panel"><h2>Distribuição por transportadora</h2><p class="cap">Carros no filtro · ' + L.ddmm(r.from) + " a " + L.ddmm(r.to) + '</p><div class="donut-wrap"><svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="Distribuição de carros por transportadora">' + paths + '<text x="90" y="86" text-anchor="middle" font-size="22" font-weight="700" fill="#1a4f8b">' + list.length + '</text><text x="90" y="104" text-anchor="middle" font-size="11" fill="#8b9aab">carros</text></svg><div class="donut-legend">' + legendHtml + "</div></div></section>";
