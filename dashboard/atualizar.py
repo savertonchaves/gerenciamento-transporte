@@ -259,11 +259,18 @@ def touch_index(updated: date, rows, names) -> None:
     if dates:
         first = min(dates)
         last = max(dates)
-        html = re.sub(r'(id="ini"[^>]*min=")[^"]+"', r'\1' + first[:8] + '01"', html, count=1)
-        html = re.sub(r'(id="fim"[^>]*min=")[^"]+"', r'\1' + first[:8] + '01"', html, count=1)
-        year = int(last[:4]) + 1
-        html = re.sub(r'(id="ini"[^>]*max=")[^"]+"', rf'\1{year}-12-31"', html, count=1)
-        html = re.sub(r'(id="fim"[^>]*max=")[^"]+"', rf'\1{year}-12-31"', html, count=1)
+        floor = first[:7] + "-01"
+        ceiling = str(int(last[:4]) + 1) + "-12-31"
+
+        def widen(kind, value):
+            def replacer(match):
+                return match.group(1) + value + '"'
+            nonlocal html
+            html = re.sub(r'(id="ini"[^>]*\b' + kind + r'=")[^"]+"', replacer, html, count=1)
+            html = re.sub(r'(id="fim"[^>]*\b' + kind + r'=")[^"]+"', replacer, html, count=1)
+
+        widen("min", floor)
+        widen("max", ceiling)
     INDEX_HTML.write_text(html, encoding="utf-8")
 
 

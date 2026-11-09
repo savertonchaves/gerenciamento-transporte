@@ -10,10 +10,12 @@ python3 -m http.server 8080
 
 Abra http://127.0.0.1:8080
 
-## Atualização automática
+## Atualização
 
-O painel relê a planilha do SharePoint sozinho, de hora em hora, nos dias úteis, das 8h às 18h (horário de São Paulo). Se a transportadora ou a programação mudou, o site é publicado de novo. Se nada mudou, ele não mexe no site.
+A Vertiv não autorizou a leitura direta do SharePoint. Quando chegar uma planilha nova, rode:
 
-A planilha em si não vai para o site nem para o repositório. Entram só data, origem, transportadora, ordem de frete, material e se já houve baixa DRM.
+```bash
+python3 dashboard/atualizar.py caminho/da/planilha.xlsx
+```
 
-Falta uma autorização, uma vez. O SharePoint da Vertiv não entrega o arquivo sem o login da empresa. Depois dessa autorização, ninguém precisa voltar aqui para atualizar.
+O comando relê as abas Nacional e Importado e só grava `data.js` se os carros mudaram. A planilha completa não entra no site. Entram data, origem, transportadora, ordem de frete, material e se já houve baixa DRM.
