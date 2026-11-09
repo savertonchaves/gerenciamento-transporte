@@ -132,31 +132,46 @@
     return '<div class="scroll"' + (opts.tall ? ' style="max-height:70vh"' : "") + "><table>" + head + body + "</table></div>";
   }
 
+  function carrierCounts(dl, carriers) {
+    return carriers.map(function (c) {
+      var n = dl.filter(function (t) { return L.carrierOf(t) === c; }).length;
+      return n ? String(n) : "–";
+    });
+  }
+
+  function originCells(dl, carriers) {
+    var nums = carrierCounts(dl, carriers).map(function (n) { return '<td class="num">' + n + "</td>"; }).join("");
+    var total = dl.length ? "<b>" + dl.length + "</b>" : "–";
+    var prog = dl.length ? esc(L.oneLine(dl)) : "–";
+    return nums + '<td class="num">' + total + '</td><td class="prog">' + prog + "</td>";
+  }
+
   function dailyTable(list) {
     var carriers = activeCarriers(list);
     var days = chartDays(list).filter(function (d) { return onDay(list, d).length; });
-    var headers = ["Dia"].concat(carriers, ["Total", "Programação"]);
-    var rows = days.map(function (d) {
-      var dl = onDay(list, d);
-      var cells = ["<b>" + esc(L.dayLabel(d)) + "</b>"];
-      carriers.forEach(function (c) {
-        var n = dl.filter(function (t) { return L.carrierOf(t) === c; }).length;
-        cells.push(n ? String(n) : "–");
-      });
-      cells.push("<b>" + dl.length + "</b>");
-      cells.push(esc(L.oneLine(dl)));
-      return { cells: cells, tone: dl.some(function (t) { return t[2] < 0; }) ? "warn" : "" };
-    });
-    var totalCells = ["Total"];
-    carriers.forEach(function (c) {
-      totalCells.push(String(list.filter(function (t) { return L.carrierOf(t) === c; }).length));
-    });
-    totalCells.push(String(list.length));
-    totalCells.push(esc(L.oneLine(list)));
-    rows.push({ tone: "total", cells: totalCells });
-    var nums = carriers.map(function (_, i) { return i + 1; });
-    nums.push(carriers.length + 1);
-    return '<section class="card panel"><h2>Controle diário — carros × transportadora</h2><p class="cap">Linha em destaque: dia com carro sem transportadora</p>' + table(headers, rows, { nums: nums, prog: true }) + "</section>";
+    var origins = ["I", "N"];
+    var headers = ["Dia", "Tipo de material"].concat(carriers, ["Total", "Programação"]);
+    var head = "<tr>" + headers.map(function (h, i) {
+      return '<th class="' + (i >= 2 && i < headers.length - 1 ? "num" : "") + '">' + esc(h) + "</th>";
+    }).join("") + "</tr>";
+    var body = days.map(function (d) {
+      return origins.map(function (o, idx) {
+        var dl = onDay(list, d).filter(function (t) { return t[1] === o; });
+        var warn = dl.some(function (t) { return t[2] < 0; });
+        var cls = (idx === 0 ? "pair-start" : "pair-end") + (warn ? " warn" : "");
+        var day = idx === 0 ? '<td class="daycell" rowspan="2"><b>' + esc(L.dayLabel(d)) + "</b></td>" : "";
+        return '<tr class="' + cls + '">' + day + "<td>" + esc(L.NOME[o]) + "</td>" + originCells(dl, carriers) + "</tr>";
+      }).join("");
+    }).join("");
+    var totals = origins.map(function (o, idx) {
+      var dl = list.filter(function (t) { return t[1] === o; });
+      var warn = dl.some(function (t) { return t[2] < 0; });
+      var day = idx === 0 ? '<td class="daycell" rowspan="2">Total</td>' : "";
+      return '<tr class="total' + (warn ? " warn" : "") + '">' + day + "<td>" + esc(L.NOME[o]) + "</td>" + originCells(dl, carriers) + "</tr>";
+    }).join("");
+    var grandNums = carrierCounts(list, carriers).map(function (n) { return '<td class="num">' + n + "</td>"; }).join("");
+    var grand = '<tr class="total"><td colspan="2">Total geral</td>' + grandNums + '<td class="num">' + list.length + '</td><td class="prog">' + esc(L.oneLine(list)) + "</td></tr>";
+    return '<section class="card panel"><h2>Controle diário — carros × transportadora</h2><p class="cap">Cada dia tem duas linhas. Os carros de Importado e de Nacional ficam na linha do seu tipo. Linha em destaque: carro sem transportadora.</p><div class="scroll"><table>' + head + body + totals + grand + "</table></div></section>";
   }
 
   function kpi(label, value, hint, alert) {
