@@ -119,14 +119,15 @@
   function table(headers, rows, opts) {
     opts = opts || {};
     var nums = opts.nums || [];
+    var wrap = opts.wrap || [];
     var head = "<tr>" + headers.map(function (h, i) {
       return '<th class="' + (nums.indexOf(i) >= 0 ? "num" : "") + '">' + esc(h) + "</th>";
     }).join("") + "</tr>";
     var body = rows.map(function (row) {
       var cls = row.tone ? ' class="' + row.tone + '"' : "";
       return "<tr" + cls + ">" + row.cells.map(function (cell, i) {
-        var prog = opts.prog && i === row.cells.length - 1;
-        return '<td class="' + (nums.indexOf(i) >= 0 ? "num" : "") + (prog ? " prog" : "") + '">' + cell + "</td>";
+        var prog = (opts.prog && i === row.cells.length - 1) || wrap.indexOf(i) >= 0;
+        return '<td class="' + (nums.indexOf(i) >= 0 ? "num" : "") + (prog ? " mat" : "") + '">' + cell + "</td>";
       }).join("") + "</tr>";
     }).join("");
     return '<div class="scroll"' + (opts.tall ? ' style="max-height:70vh"' : "") + "><table>" + head + body + "</table></div>";
@@ -139,20 +140,34 @@
     });
   }
 
+  function materialsOf(dl) {
+    var seen = {};
+    var out = [];
+    dl.forEach(function (t) {
+      String(t[5] || "").split(" · ").forEach(function (m) {
+        if (!m || seen[m]) return;
+        seen[m] = 1;
+        out.push(m);
+      });
+    });
+    return out.length ? out.join(" · ") : "–";
+  }
+
   function originCells(dl, carriers) {
+    var mat = '<td class="mat">' + esc(materialsOf(dl)) + "</td>";
     var nums = carrierCounts(dl, carriers).map(function (n) { return '<td class="num">' + n + "</td>"; }).join("");
     var total = dl.length ? "<b>" + dl.length + "</b>" : "–";
     var prog = dl.length ? esc(L.oneLine(dl)) : "–";
-    return nums + '<td class="num">' + total + '</td><td class="prog">' + prog + "</td>";
+    return mat + nums + '<td class="num">' + total + '</td><td class="prog">' + prog + "</td>";
   }
 
   function dailyTable(list) {
     var carriers = activeCarriers(list);
     var days = chartDays(list).filter(function (d) { return onDay(list, d).length; });
     var origins = ["I", "N"];
-    var headers = ["Dia", "Tipo de material"].concat(carriers, ["Total", "Programação"]);
+    var headers = ["Dia", "Tipo de material", "Material"].concat(carriers, ["Total", "Programação"]);
     var head = "<tr>" + headers.map(function (h, i) {
-      return '<th class="' + (i >= 2 && i < headers.length - 1 ? "num" : "") + '">' + esc(h) + "</th>";
+      return '<th class="' + (i >= 3 && i < headers.length - 1 ? "num" : "") + '">' + esc(h) + "</th>";
     }).join("") + "</tr>";
     var body = days.map(function (d) {
       return origins.map(function (o, idx) {
@@ -170,8 +185,8 @@
       return '<tr class="total' + (warn ? " warn" : "") + '">' + day + "<td>" + esc(L.NOME[o]) + "</td>" + originCells(dl, carriers) + "</tr>";
     }).join("");
     var grandNums = carrierCounts(list, carriers).map(function (n) { return '<td class="num">' + n + "</td>"; }).join("");
-    var grand = '<tr class="total"><td colspan="2">Total geral</td>' + grandNums + '<td class="num">' + list.length + '</td><td class="prog">' + esc(L.oneLine(list)) + "</td></tr>";
-    return '<section class="card panel"><h2>Controle diário — carros × transportadora</h2><p class="cap">Cada dia tem duas linhas. Os carros de Importado e de Nacional ficam na linha do seu tipo. Linha em destaque: carro sem transportadora.</p><div class="scroll"><table>' + head + body + totals + grand + "</table></div></section>";
+    var grand = '<tr class="total"><td colspan="2">Total geral</td><td class="mat">' + esc(materialsOf(list)) + "</td>" + grandNums + '<td class="num">' + list.length + '</td><td class="prog">' + esc(L.oneLine(list)) + "</td></tr>";
+    return '<section class="card panel"><h2>Controle diário — carros × transportadora</h2><p class="cap">Cada dia tem duas linhas. Material é a descrição da planilha. No importado, se vários contêineres estão na mesma célula, a descrição vale para o conjunto. Linha em destaque: carro sem transportadora.</p><div class="scroll"><table class="daily">' + head + body + totals + grand + "</table></div></section>";
   }
 
   function kpi(label, value, hint, alert) {
@@ -266,10 +281,10 @@
     var rows = sorted.map(function (t) {
       return {
         tone: t[2] < 0 ? "warn" : "",
-        cells: [esc(L.dayLabel(L.fullDate(t))), esc(L.NOME[t[1]]), esc(L.carrierOf(t)), esc(t[3]), esc(SIT[L.status(t, today)])],
+        cells: [esc(L.dayLabel(L.fullDate(t))), esc(L.NOME[t[1]]), esc(L.carrierOf(t)), esc(t[5] || "–"), esc(t[3]), esc(SIT[L.status(t, today)])],
       };
     });
-    return '<section class="card panel"><h2>Carros no filtro · ' + list.length + '</h2><p class="cap">Importado: contêiner (OF). Nacional: ordem de frete. Linha em destaque: sem transportadora.</p>' + table(["Dia", "Origem", "Transportadora", "Referência", "Situação"], rows, { tall: true }) + "</section>";
+    return '<section class="card panel"><h2>Carros no filtro · ' + list.length + '</h2><p class="cap">Importado: contêiner (OF). Nacional: ordem de frete. Linha em destaque: sem transportadora.</p>' + table(["Dia", "Origem", "Transportadora", "Material", "Referência", "Situação"], rows, { tall: true, wrap: [3] }) + "</section>";
   }
 
   var VIEWS = { geral: viewGeral, dia: viewDia, transp: viewTransp, detalhe: viewDetalhe };
