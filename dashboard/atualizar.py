@@ -120,11 +120,11 @@ def read_nacional(ws):
             continue
         if cancelled(row_text(row)):
             continue
-        drm = row[11] if len(row) > 11 else None
+        drm = row[12] if len(row) > 12 else None
         if recusado(drm):
             continue
         ofn = of_number(row[4] if len(row) > 4 else None)
-        when = as_date(row[9] if len(row) > 9 else None)
+        when = as_date(row[10] if len(row) > 10 else None)
         if not ofn or not when:
             continue
         group = groups.setdefault(when.isoformat() + "|" + ofn, {
@@ -165,7 +165,7 @@ def read_importado(ws):
     for row in ws.iter_rows(min_row=7, values_only=True):
         if not row:
             continue
-        when = as_date(row[11] if len(row) > 11 else None)
+        when = as_date(row[12] if len(row) > 12 else None)
         ofn = of_number(row[2] if len(row) > 2 else None)
         if not when or not ofn:
             continue
@@ -174,7 +174,7 @@ def read_importado(ws):
             continue
         material = clean(row[1] if len(row) > 1 else "")
         carrier = norm_carrier(row[4] if len(row) > 4 else None)
-        delivered = as_date(row[12] if len(row) > 12 else None) is not None
+        delivered = as_date(row[13] if len(row) > 13 else None) is not None
         for code in codes:
             group = groups.setdefault(when.isoformat() + "|" + code, {
                 "date": when, "code": code, "ofs": [], "mats": [], "carrier": None, "delivered": 0,
