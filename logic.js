@@ -87,7 +87,85 @@
     }).join(" + ");
   }
 
+  function expand(token) {
+    var d = String(token || "");
+    if (!d) return "";
+    return d.length > 5 ? d : "2026-" + d;
+  }
+  function originalDate(t) { return expand(t[6]) || fullDate(t); }
+  function realDate(t) { return expand(t[7]); }
+  function plannedDate(t, base) { return base === "orig" ? originalDate(t) : fullDate(t); }
+  function diffDays(a, b) { return Math.round((utc(a) - utc(b)) / 86400000); }
+  function scoped(list, q) {
+    var chips = q.chips || [];
+    return list.filter(function (t) {
+      if (q.carrier && q.carrier !== "todas" && carrierOf(t) !== q.carrier) return false;
+      if (q.origin && q.origin !== "todas" && t[1] !== q.origin) return false;
+      if (chips.length && chips.indexOf(carrierOf(t)) < 0) return false;
+      return true;
+    });
+  }
+  function delivered(list, q, base) {
+    var from = q.from, to = q.to;
+    if (from > to) { var s = from; from = to; to = s; }
+    return scoped(list, q).filter(function (t) {
+      var r = realDate(t);
+      return r && r >= from && r <= to;
+    }).map(function (t) {
+      return { t: t, dev: diffDays(realDate(t), plannedDate(t, base)) };
+    });
+  }
+  function pending(list, q, base) {
+    var to = q.to;
+    if (q.from > to) to = q.from;
+    return scoped(list, q).filter(function (t) {
+      return !realDate(t) && plannedDate(t, base) <= to;
+    }).map(function (t) {
+      var p = plannedDate(t, base);
+      return { t: t, vencido: p < q.today, atraso: p < q.today ? diffDays(q.today, p) : 0 };
+    });
+  }
+  function metrics(done, pend) {
+    var m = { entregues: done.length, noPrazo: 0, adiantadas: 0, atrasadas: 0, soma: 0, vencidos: 0, aVencer: 0 };
+    done.forEach(function (x) {
+      m.soma += x.dev;
+      if (x.dev === 0) m.noPrazo += 1;
+      else if (x.dev < 0) m.adiantadas += 1;
+      else m.atrasadas += 1;
+    });
+    pend.forEach(function (x) { if (x.vencido) m.vencidos += 1; else m.aVencer += 1; });
+    m.media = done.length ? m.soma / done.length : 0;
+    m.base = m.entregues + m.vencidos;
+    m.pctEntregue = m.base ? Math.round((m.entregues / m.base) * 100) : 0;
+    m.pctPrazo = m.entregues ? Math.round(((m.noPrazo + m.adiantadas) / m.entregues) * 100) : 0;
+    return m;
+  }
+  function daySeries(list, q, base) {
+    var from = q.from, to = q.to;
+    if (from > to) { var s = from; from = to; to = s; }
+    var sc = scoped(list, q);
+    return eachDay(from, to).map(function (d) {
+      var prev = sc.filter(function (t) { return plannedDate(t, base) === d; }).length;
+      var done = sc.filter(function (t) { return realDate(t) === d; });
+      var sub = done.map(function (t) { return diffDays(d, plannedDate(t, base)); });
+      return {
+        d: d, previsto: prev, realizado: done.length,
+        noPrazo: sub.filter(function (v) { return v === 0; }).length,
+        adiantadas: sub.filter(function (v) { return v < 0; }).length,
+        atrasadas: sub.filter(function (v) { return v > 0; }).length,
+      };
+    });
+  }
+
   root.OmniaLogic = {
+    originalDate: originalDate,
+    realDate: realDate,
+    plannedDate: plannedDate,
+    diffDays: diffDays,
+    delivered: delivered,
+    pending: pending,
+    metrics: metrics,
+    daySeries: daySeries,
     CARRIERS: CARRIERS,
     SEM: SEM,
     ALL: ALL,
