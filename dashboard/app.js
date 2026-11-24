@@ -1,7 +1,7 @@
 (function () {
   var L = window.OmniaLogic;
   var SIT = { movimentar: "A movimentar", entregue: "Entregue", semBaixa: "Sem baixa DRM" };
-  var state = { ini: "", fim: "", transp: "todas", origem: "todas", situacao: "todas", chips: [], tab: "geral" };
+  var state = { ini: "", fim: "", transp: "todas", origem: "todas", situacao: "todas", chips: [], tab: "geral", base: "reaj" };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -328,7 +328,183 @@
     return '<section class="card panel"><h2>Carros no filtro · ' + list.length + '</h2><p class="cap">Importado: contêiner (OF). Nacional: ordem de frete. Linha em destaque: sem transportadora.</p>' + table(["Dia", "Origem", "Transportadora", "Material", "Referência", "Situação"], rows, { tall: true, wrap: [3] }) + "</section>";
   }
 
-  var VIEWS = { geral: viewGeral, dia: viewDia, transp: viewTransp, detalhe: viewDetalhe };
+  var BASE_NOME = { reaj: "Data prevista reajustada", orig: "Previsão de entrega original" };
+  var BASE_CURTO = { reaj: "Reajustada", orig: "Original" };
+
+  function otherBase() { return state.base === "reaj" ? "orig" : "reaj"; }
+  function signed(n) { return n > 0 ? "+" + n : String(n); }
+  function dias(n) { return n + (Math.abs(n) === 1 ? " dia" : " dias"); }
+  function avg(n) {
+    var v = Math.round(n * 10) / 10;
+    return (v > 0 ? "+" : "") + String(v).replace(".", ",");
+  }
+  function fullBr(iso) {
+    return iso ? L.ddmm(iso) + "/" + iso.slice(0, 4) : "–";
+  }
+
+  function prevQuery() {
+    var r = range();
+    return {
+      from: r.from, to: r.to, carrier: state.transp, origin: state.origem,
+      chips: state.chips, today: L.todayIso(),
+    };
+  }
+
+  function prevData(base) {
+    var q = prevQuery();
+    var done = L.delivered(window.OMNIA_TRUCKS, q, base);
+    var pend = L.pending(window.OMNIA_TRUCKS, q, base);
+    return { q: q, done: done, pend: pend, m: L.metrics(done, pend) };
+  }
+
+  function prevBars(series) {
+    var r = range();
+    var span = series.length <= 16 ? series : series.filter(function (s) { return s.previsto || s.realizado; });
+    if (!span.length) return "";
+    var max = Math.max(1, Math.max.apply(null, span.map(function (s) { return Math.max(s.previsto, s.realizado); })));
+    var step = Math.max(1, Math.ceil(max / 4));
+    var ticks = [];
+    for (var v = 0; v <= max; v += step) ticks.push(v);
+    if (ticks[ticks.length - 1] !== max) ticks.push(max);
+    var W = Math.max(520, span.length * 64);
+    var H = 250;
+    var padL = 28, padR = 8, padT = 8, padB = 52;
+    var iw = W - padL - padR;
+    var ih = H - padT - padB;
+    var slot = iw / span.length;
+    var gap = Math.min(14, slot * 0.3);
+    var bw = Math.max(6, (slot - gap) / 2);
+    var parts = [];
+    ticks.forEach(function (t) {
+      var y = padT + ih - (t / max) * ih;
+      parts.push('<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" stroke="#e3eaf2"/>');
+      parts.push('<text x="' + (padL - 4) + '" y="' + (y + 3) + '" text-anchor="end" font-size="10" fill="#8b9aab">' + t + "</text>");
+    });
+    span.forEach(function (s, i) {
+      var x = padL + i * slot + gap / 2;
+      var hp = (s.previsto / max) * ih;
+      var hr = (s.realizado / max) * ih;
+      parts.push('<rect x="' + x + '" y="' + (padT + ih - hp) + '" width="' + bw + '" height="' + hp + '" fill="#8fb0d6"><title>' + esc(L.dayLabel(s.d) + " · previsto: " + s.previsto) + "</title></rect>");
+      parts.push('<rect x="' + (x + bw) + '" y="' + (padT + ih - hr) + '" width="' + bw + '" height="' + hr + '" fill="#1a4f8b"><title>' + esc(L.dayLabel(s.d) + " · realizado: " + s.realizado) + "</title></rect>");
+      var lx = x + bw;
+      var ly = padT + ih + 14;
+      parts.push('<text x="' + lx + '" y="' + ly + '" text-anchor="end" font-size="10" fill="#6b7c90" transform="rotate(-40 ' + lx + " " + ly + ')">' + esc(L.dayLabel(s.d)) + "</text>");
+    });
+    var cap = "Eixo X: dia · Eixo Y: carros · " + L.ddmm(r.from) + " a " + L.ddmm(r.to) + " · previsto na " + BASE_CURTO[state.base].toLowerCase();
+    if (series.length > 16) cap += " · somente dias com movimento";
+    return '<section class="card panel"><h2>Previsto × realizado por dia</h2><p class="cap">' + cap + '</p><svg viewBox="0 0 ' + W + " " + H + '" width="100%" height="250" role="img" aria-label="Carros previstos e realizados por dia">' + parts.join("") + '</svg><div class="legend"><span><i class="sw" style="background:#8fb0d6"></i>Previsto no dia</span><span><i class="sw" style="background:#1a4f8b"></i>Entregue no dia</span></div></section>';
+  }
+
+  function desvioPanel(done) {
+    var map = {};
+    done.forEach(function (x) { map[x.dev] = (map[x.dev] || 0) + 1; });
+    var keys = Object.keys(map).map(Number).sort(function (a, b) { return a - b; });
+    var max = Math.max(1, Math.max.apply(null, keys.map(function (k) { return map[k]; })));
+    var body = keys.length ? keys.map(function (k) {
+      var color = k === 0 ? "#1f8a7a" : k < 0 ? "#8fb0d6" : "#e07b1a";
+      var label = k === 0 ? "No prazo" : k < 0 ? "Adiantado " + dias(-k) : "Atrasado " + dias(k);
+      return '<div class="hbar"><div class="name">' + esc(label) + '</div><div class="track"><div class="seg" style="width:' + (map[k] / max * 100) + "%;background:" + color + '"></div></div><div class="n">' + map[k] + "</div></div>";
+    }).join("") : '<p class="empty">Nenhuma entrega no período.</p>';
+    return '<section class="card panel"><h2>Desvio da entrega</h2><p class="cap">Dias entre a previsão (' + esc(BASE_CURTO[state.base].toLowerCase()) + ") e a entrega real</p>" + body + "</section>";
+  }
+
+  function compareTable(a, b) {
+    function row(label, fa, fb, tone) { return { tone: tone || "", cells: [esc(label), fa, fb] }; }
+    var rows = [
+      row("Entregues no período", String(a.entregues), String(b.entregues)),
+      row("No prazo", String(a.noPrazo), String(b.noPrazo)),
+      row("Adiantadas", String(a.adiantadas), String(b.adiantadas)),
+      row("Atrasadas", String(a.atrasadas), String(b.atrasadas), "warn"),
+      row("Desvio médio (dias)", avg(a.media), avg(b.media)),
+      row("% no prazo ou adiantadas", a.pctPrazo + "%", b.pctPrazo + "%"),
+      row("Pendentes vencidos", String(a.vencidos), String(b.vencidos), "warn"),
+    ];
+    return '<section class="card panel"><h2>Comparar as duas previsões</h2><p class="cap">Mesmo período e mesmas entregas, medidas contra cada data</p>' + table(["Indicador", "Reajustada", "Original"], rows, { nums: [1, 2] }) + "</section>";
+  }
+
+  function carrierPrazo(done, pend) {
+    var names = L.ALL.filter(function (c) {
+      return done.some(function (x) { return L.carrierOf(x.t) === c; }) || pend.some(function (x) { return L.carrierOf(x.t) === c; });
+    });
+    var rows = names.map(function (c) {
+      var d = done.filter(function (x) { return L.carrierOf(x.t) === c; });
+      var p = pend.filter(function (x) { return L.carrierOf(x.t) === c; });
+      var m = L.metrics(d, p);
+      return {
+        tone: c === L.SEM ? "warn" : "",
+        cells: [esc(c), String(m.entregues), String(m.noPrazo), String(m.adiantadas), String(m.atrasadas), m.entregues ? m.pctPrazo + "%" : "–", m.entregues ? avg(m.media) : "–", String(m.vencidos), String(m.aVencer)],
+      };
+    });
+    var t = L.metrics(done, pend);
+    rows.push({ tone: "total", cells: ["Total", String(t.entregues), String(t.noPrazo), String(t.adiantadas), String(t.atrasadas), t.entregues ? t.pctPrazo + "%" : "–", t.entregues ? avg(t.media) : "–", String(t.vencidos), String(t.aVencer)] });
+    return '<section class="card panel"><h2>Por transportadora</h2><p class="cap">% no prazo = no prazo + adiantadas, sobre as entregues · pendentes: sem DRM com previsão até o fim do período</p>' + table(["Transportadora", "Entregues", "No prazo", "Adiantadas", "Atrasadas", "% no prazo", "Desvio médio", "Pend. vencidos", "A vencer"], rows, { nums: [1, 2, 3, 4, 5, 6, 7, 8] }) + "</section>";
+  }
+
+  function dayPrazo(series) {
+    var rows = series.filter(function (s) { return s.previsto || s.realizado; }).map(function (s) {
+      var diff = s.realizado - s.previsto;
+      return { cells: [esc(L.dayLabel(s.d)), String(s.previsto), String(s.realizado), diff === 0 ? "0" : signed(diff), String(s.noPrazo), String(s.adiantadas), String(s.atrasadas)] };
+    });
+    var tot = series.reduce(function (a, s) {
+      return { p: a.p + s.previsto, r: a.r + s.realizado, n: a.n + s.noPrazo, d: a.d + s.adiantadas, t: a.t + s.atrasadas };
+    }, { p: 0, r: 0, n: 0, d: 0, t: 0 });
+    rows.push({ tone: "total", cells: ["Total", String(tot.p), String(tot.r), signed(tot.r - tot.p), String(tot.n), String(tot.d), String(tot.t)] });
+    return '<section class="card panel"><h2>Por dia</h2><p class="cap">Previsto = carros com previsão no dia · Realizado = carros entregues no dia (DRM) · prazo medido sobre os entregues do dia</p>' + table(["Dia", "Previsto", "Realizado", "Realizado − previsto", "No prazo", "Adiantadas", "Atrasadas"], rows, { nums: [1, 2, 3, 4, 5, 6], tall: true }) + "</section>";
+  }
+
+  function lateList(done, pend) {
+    var other = otherBase();
+    var items = [];
+    done.forEach(function (x) { if (x.dev > 0) items.push({ x: x, days: x.dev, pend: false }); });
+    pend.forEach(function (x) { if (x.vencido) items.push({ x: x, days: x.atraso, pend: true }); });
+    items.sort(function (a, b) { return b.days - a.days || (L.plannedDate(a.x.t, state.base) < L.plannedDate(b.x.t, state.base) ? -1 : 1); });
+    if (!items.length) return '<section class="card panel"><h2>Carros atrasados</h2><p class="empty">Nenhum carro atrasado neste período.</p></section>';
+    var rows = items.map(function (it) {
+      var t = it.x.t;
+      return {
+        tone: it.pend ? "warn" : "",
+        cells: [
+          it.pend ? "Pendente" : "Entregue com atraso",
+          esc(t[3]), esc(L.NOME[t[1]]), esc(L.carrierOf(t)), esc(t[5] || "–"),
+          esc(fullBr(L.plannedDate(t, state.base))), esc(fullBr(L.plannedDate(t, other))),
+          it.pend ? "–" : esc(fullBr(L.realDate(t))),
+          it.pend ? "há " + dias(it.days) : "+" + dias(it.days),
+        ],
+      };
+    });
+    return '<section class="card panel"><h2>Carros atrasados · ' + items.length + '</h2><p class="cap">Entregues depois do previsto e pendentes já vencidos, do maior atraso para o menor. Linha em destaque: ainda sem entrega.</p>' + table(["Situação", "Referência", "Origem", "Transportadora", "Material", "Previsto (" + BASE_CURTO[state.base].toLowerCase() + ")", "Previsto (" + BASE_CURTO[other].toLowerCase() + ")", "Entregue em", "Atraso"], rows, { tall: true, wrap: [4] }) + "</section>";
+  }
+
+  function viewPrev() {
+    var cur = prevData(state.base);
+    var alt = prevData(otherBase());
+    var m = cur.m;
+    var r = range();
+    var periodo = L.ddmm(r.from) + " a " + L.ddmm(r.to);
+    var series = L.daySeries(window.OMNIA_TRUCKS, cur.q, state.base);
+    var control = '<section class="card panel basebar"><div><label class="fld" for="base">Previsto = </label><select id="base"><option value="reaj"' + (state.base === "reaj" ? " selected" : "") + '>Data prevista reajustada</option><option value="orig"' + (state.base === "orig" ? " selected" : "") + '>Previsão de entrega original</option></select></div>'
+      + '<p class="rule-text"><b>Regra.</b> Realizado = DATA ENTREGA (DRM) preenchida. O período filtra a data de entrega real. Desvio = entrega real menos o previsto escolhido: 0 no prazo, negativo adiantado, positivo atrasado. Pendente = sem DRM e com previsão até o fim do período; vencido se a previsão é anterior a hoje. % entregue = entregues ÷ (entregues + pendentes vencidos).</p></section>';
+    var html = control + '<div class="section">Entregas no período · ' + periodo + '</div><div class="kpis">'
+      + kpi("Entregues", String(m.entregues), "DRM no período")
+      + kpi("Pendentes vencidos", String(m.vencidos), "sem DRM, previsão antes de hoje", m.vencidos > 0)
+      + kpi("% entregue", m.pctEntregue + "%", m.entregues + " de " + m.base + " carros")
+      + kpi("A vencer", String(m.aVencer), "sem DRM, previsão de hoje até " + L.ddmm(r.to))
+      + "</div>"
+      + '<div class="section">Prazo · base ' + esc(BASE_CURTO[state.base].toLowerCase()) + '</div><div class="kpis">'
+      + kpi("No prazo", String(m.noPrazo), pct(m.noPrazo, m.entregues) + " das entregues")
+      + kpi("Adiantadas", String(m.adiantadas), pct(m.adiantadas, m.entregues) + " das entregues")
+      + kpi("Atrasadas", String(m.atrasadas), pct(m.atrasadas, m.entregues) + " das entregues", m.atrasadas > 0)
+      + kpi("Desvio médio", m.entregues ? avg(m.media) + " d" : "–", "dias, entregues no período")
+      + "</div>";
+    if (!m.entregues && !cur.pend.length) return html + '<p class="empty">Nenhuma entrega nem pendência neste período.</p>';
+    html += '<div class="charts">' + prevBars(series) + desvioPanel(cur.done) + "</div>";
+    html += '<div class="split">' + compareTable(m, alt.m) + carrierPrazo(cur.done, cur.pend) + "</div>";
+    html += dayPrazo(series);
+    html += lateList(cur.done, cur.pend);
+    return html;
+  }
+
+  var VIEWS = { geral: viewGeral, dia: viewDia, transp: viewTransp, detalhe: viewDetalhe, prev: viewPrev };
 
   function chipBadge() {
     var n = state.chips.length;
@@ -343,10 +519,16 @@
   }
 
   function render() {
-    var list = current();
     var r = range();
-    var nImp = list.filter(function (t) { return t[1] === "I"; }).length;
-    $("count").textContent = list.length + " de " + window.OMNIA_TRUCKS.length + " carros · " + nImp + " importado · " + (list.length - nImp) + " nacional · " + L.ddmm(r.from) + " a " + L.ddmm(r.to);
+    var list = state.tab === "prev" ? [] : current();
+    if (state.tab === "prev") {
+      var pd = prevData(state.base);
+      $("count").textContent = pd.m.entregues + " entregues e " + pd.m.vencidos + " pendentes vencidos · filtro pela data de entrega real · " + L.ddmm(r.from) + " a " + L.ddmm(r.to);
+    } else {
+      var nImp = list.filter(function (t) { return t[1] === "I"; }).length;
+      $("count").textContent = list.length + " de " + window.OMNIA_TRUCKS.length + " carros · " + nImp + " importado · " + (list.length - nImp) + " nacional · " + L.ddmm(r.from) + " a " + L.ddmm(r.to);
+    }
+    $("situacao").disabled = state.tab === "prev";
     Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (btn) {
       var on = btn.getAttribute("data-tab") === state.tab;
       btn.classList.toggle("on", on);
@@ -400,6 +582,9 @@
       $("situacao").value = "todas";
       paintChips();
       render();
+    });
+    $("view").addEventListener("change", function (e) {
+      if (e.target && e.target.id === "base") { state.base = e.target.value; render(); }
     });
     document.querySelector(".tabs").addEventListener("click", function (e) {
       var btn = e.target.closest(".tab");

@@ -6,7 +6,7 @@ Uso:
   python3 dashboard/atualizar.py --baixar /tmp/omnia.xlsx
 
 A planilha não entra no site. Só saem os carros (data, origem, transportadora,
-ordem de frete, material e se já tem baixa DRM).
+ordem de frete, material, previsão original e data da baixa DRM).
 """
 from __future__ import annotations
 
@@ -104,13 +104,17 @@ def recusado(value) -> bool:
     return isinstance(value, str) and value.strip().lower() == "recusado"
 
 
-def remember(group, material: str, carrier: str | None, delivered: bool) -> None:
+def remember(group, material: str, carrier: str | None, real: date | None, original: date | None) -> None:
     if material and material not in group["mats"]:
         group["mats"].append(material)
     if carrier and not group["carrier"]:
         group["carrier"] = carrier
-    if delivered:
+    if real:
         group["delivered"] = 1
+        if not group["real"] or real > group["real"]:
+            group["real"] = real
+    if original and (not group["original"] or original < group["original"]):
+        group["original"] = original
 
 
 def read_nacional(ws):
@@ -129,8 +133,15 @@ def read_nacional(ws):
             continue
         group = groups.setdefault(when.isoformat() + "|" + ofn, {
             "date": when, "of": ofn, "mats": [], "carrier": None, "delivered": 0,
+            "real": None, "original": None,
         })
-        remember(group, clean(row[1] if len(row) > 1 else ""), norm_carrier(row[3] if len(row) > 3 else None), as_date(drm) is not None)
+        remember(
+            group,
+            clean(row[1] if len(row) > 1 else ""),
+            norm_carrier(row[3] if len(row) > 3 else None),
+            as_date(drm),
+            as_date(row[9] if len(row) > 9 else None),
+        )
     trucks = []
     for group in groups.values():
         trucks.append({
@@ -140,6 +151,8 @@ def read_nacional(ws):
             "ref": "OF " + group["of"],
             "delivered": group["delivered"],
             "material": SEP.join(group["mats"]),
+            "original": group["original"],
+            "real": group["real"],
         })
     return trucks
 
@@ -174,14 +187,16 @@ def read_importado(ws):
             continue
         material = clean(row[1] if len(row) > 1 else "")
         carrier = norm_carrier(row[4] if len(row) > 4 else None)
-        delivered = as_date(row[13] if len(row) > 13 else None) is not None
+        real = as_date(row[13] if len(row) > 13 else None)
+        original = as_date(row[11] if len(row) > 11 else None)
         for code in codes:
             group = groups.setdefault(when.isoformat() + "|" + code, {
                 "date": when, "code": code, "ofs": [], "mats": [], "carrier": None, "delivered": 0,
+                "real": None, "original": None,
             })
             if ofn not in group["ofs"]:
                 group["ofs"].append(ofn)
-            remember(group, material, carrier, delivered)
+            remember(group, material, carrier, real, original)
     trucks = []
     for group in groups.values():
         ofs = sorted(group["ofs"], key=lambda item: (not item.isdigit(), int(item) if item.isdigit() else item))
@@ -192,6 +207,8 @@ def read_importado(ws):
             "ref": group["code"] + " (OF " + "/".join(ofs) + ")",
             "delivered": group["delivered"],
             "material": SEP.join(group["mats"]),
+            "original": group["original"],
+            "real": group["real"],
         })
     return trucks
 
@@ -220,6 +237,8 @@ def to_rows(trucks) -> list[list]:
             truck["ref"],
             truck["delivered"],
             truck["material"],
+            stamp(truck["original"] or truck["date"]),
+            stamp(truck["real"]) if truck["real"] else "",
         ])
     rows.sort(key=lambda row: (row[0] if len(row[0]) > 5 else "2026-" + row[0], 0 if row[1] == "I" else 1, row[2], row[3]))
     return rows
@@ -254,8 +273,9 @@ def touch_index(updated: date, rows, names) -> None:
     html = re.sub(r"\?v=[^\"']+", "?v=" + version, html)
     dates = []
     for row in rows:
-        token = row[0]
-        dates.append(token if len(token) > 5 else "2026-" + token)
+        for token in (row[0], row[6], row[7]):
+            if token:
+                dates.append(token if len(token) > 5 else "2026-" + token)
     if dates:
         first = min(dates)
         last = max(dates)

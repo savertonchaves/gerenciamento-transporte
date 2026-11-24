@@ -18,4 +18,4 @@ A Vertiv não autorizou a leitura direta do SharePoint. Quando chegar uma planil
 python3 dashboard/atualizar.py caminho/da/planilha.xlsx
 ```
 
-O comando relê as abas Nacional e Importado e só grava `data.js` se os carros mudaram. A planilha completa não entra no site. Entram data, origem, transportadora, ordem de frete, material e se já houve baixa DRM.
+O comando relê as abas Nacional e Importado e só grava `data.js` se os carros mudaram. A planilha completa não entra no site. Entram data prevista reajustada, previsão original, data da baixa DRM, origem, transportadora, ordem de frete e material.
